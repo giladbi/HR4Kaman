@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מבחן הערכה להתאמה לתפקיד: המעריך הלאומי של ישראל</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: right; }
+        .game-container { max-width: 1000px; margin: 0 auto; }
+        .game-row { display: flex; justify-content: flex-start; margin-bottom: 10px; align-items: center; }
+        .game-cell { width: 80px; height: 40px; border: 1px solid #000; display: flex; align-items: center; justify-content: center; margin-left: 5px; text-align: center; }
+        .row-label { width: 100px; text-align: right; margin-left: 10px; font-weight: bold; }
+        button { 
+            padding: 10px 15px;
+            border: none; 
+            color: white; 
+            font-weight: bold;
+            margin: 0 5px; 
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .war-btn { background-color: red; width: 60px; height: 60px; border-radius: 50%; }
+        .leak-btn { background-color: yellow; color: black; width: 60px; height: 60px; border-radius: 50%; }
+        .sleep-btn { background-color: skyblue; width: 60px; height: 60px; border-radius: 50%; }
+        .retry-btn { background-color: green; }
+        .column-headers { font-weight: bold; margin-bottom: 10px; display: flex; }
+        .column-headers .header-cell { border: none; border-bottom: 1px solid black; width: 80px; text-align: center; margin-left: 5px; }
+        .instructions { margin-top: 20px; background-color: #f0f0f0; padding: 10px; border-radius: 5px; }
+        .status-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .status-bar p { font-size: 24px; font-weight: bold; }
+        .result-box { 
+            width: 200px; 
+            padding: 10px; 
+            background-color: #f0f0f0; 
+            border-radius: 5px; 
+            margin-left: 20px;
+            display: none;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>מבחן הערכה להתאמה לתפקיד: המעריך הלאומי של ישראל</h1>
+        <div class="status-bar">
+            <p>ניקוד: <span id="score">0</span></p>
+            <p>זמן נותר: <span id="time">60</span> שניות</p>
+            <button class="retry-btn" onclick="resetGame()">התחל מחדש</button>
+        </div>
+        <div class="game-area" style="display: flex;">
+            <div>
+                <div class="column-headers">
+                    <div class="row-label"></div>
+                    <div class="header-cell">כוונות<br>אויב</div>
+                    <div class="header-cell">התרעה<br>נקודתית</div>
+                    <div class="header-cell">מוכנות<br>אויב</div>
+                </div>
+                <div id="game-board"></div>
+            </div>
+            <div class="result-box" id="resultBox"></div>
+        </div>
+        <div class="instructions">
+            <h3>לפניך המצב הצבאי והמדיני במדינות הסובבות את ישראל</h3>
+			<h3>הוראות:</h3>
+            <ul>
+				<li>עליך להעריך את המצב הבטחוני בכל אחת מן הגזרות השונות ולהפעיל התראה בהתאם לחומרת האירוע</li>
+				<li>הערכים בתאים משתנים באופן אקראי כל 3 שניות</li>
+                <li>לחץ על כפתור "מלחמה" כאשר כל 3 התאים בשורה הם 'כן' לקבלת נקודה אחת</li>
+                <li>לחץ על כפתור "מכתב לעיתונות" כאשר 2 תאים הם 'כן' לקבלת 0.25 נקודות</li>
+                <li>לחץ על כפתור "המשך לישון" כאשר 2 או 3 תאים הם 'לא' או '?' לקבלת 0.1 נקודות</li>
+                <li>לחיצה שגויה על "מלחמה": -1 נקודה, לחיצה שגויה על "מכתב לעיתונות" או "המשך לישון": -0.5 נקודות</li>
+                <li>ניתן ללחוץ רק פעם אחת לכל שורה עד לרענון התאים</li>
+                <li>מטרה: צבור כמה שיותר נקודות תוך 60 שניות</li>
+            </ul>
+        </div>
+    </div>
+    <script>
+        const ROWS = ['חיזבאללה', 'סוריה', 'איראן', 'מצרים', 'רצועת עזה', 'יהודה ושומרון'];
+        const COLUMNS = ['כוונות אויב', 'התרעה נקודתית', 'מוכנות אויב'];
+        
+        let score = 0;
+        let timeLeft = 60;
+        let lastClickedRow = null;
+        let updateInterval;
+        let timerInterval;
+        let gameOver = false;
+        let lastUpdate = {};
+        let allYesEvents = 0;
+
+        function initializeGame() {
+            const gameBoard = document.getElementById('game-board');
+            gameBoard.innerHTML = '';
+            ROWS.forEach((row, index) => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'game-row';
+                rowDiv.innerHTML = `<div class="row-label">${row}</div>` + 
+                    COLUMNS.map(() => `<div class="game-cell">?</div>`).join('') +
+                    `<button class="war-btn" onclick="action('war', ${index})">מלחמה</button>
+                     <button class="leak-btn" onclick="action('leak', ${index})">מכתב לעיתונות</button>
+                     <button class="sleep-btn" onclick="action('sleep', ${index})">המשך לישון</button>`;
+                gameBoard.appendChild(rowDiv);
+            });
+            updateCells();
+            startTimer();
+            startCellUpdates();
+            gameOver = false;
+            document.getElementById('resultBox').style.display = 'none';
+            allYesEvents = 0;
+        }
+
+        function updateCells() {
+            const rows = document.querySelectorAll('.game-row');
+            rows.forEach((row, rowIndex) => {
+                const cells = row.querySelectorAll('.game-cell');
+                let rowValues = [];
+                cells.forEach(cell => {
+                    const newValue = ['כן', 'לא', '?'][Math.floor(Math.random() * 3)];
+                    cell.textContent = newValue;
+                    rowValues.push(newValue);
+                });
+                lastUpdate[rowIndex] = rowValues;
+                if (rowValues.every(v => v === 'כן')) allYesEvents++;
+            });
+            lastClickedRow = null;
+        }
+
+        function startCellUpdates() {
+            updateInterval = setInterval(() => {
+                updateCells();
+                if (allYesEvents < 4 && timeLeft <= 15) {
+                    const randomRow = Math.floor(Math.random() * ROWS.length);
+                    const cells = document.querySelectorAll(`.game-row:nth-child(${randomRow + 1}) .game-cell`);
+                    cells.forEach(cell => cell.textContent = 'כן');
+                    allYesEvents++;
+                }
+            }, 3000);
+        }
+
+        function action(type, rowIndex) {
+            if (gameOver || lastClickedRow === rowIndex || !lastUpdate[rowIndex]) return;
+            const values = lastUpdate[rowIndex];
+            const yesCount = values.filter(v => v === 'כן').length;
+            const noOrQuestionCount = values.filter(v => v === 'לא' || v === '?').length;
+
+            let points = 0;
+            if (type === 'war' && yesCount === 3) points = 1;
+            else if (type === 'leak' && yesCount === 2) points = 0.25;
+            else if (type === 'sleep' && noOrQuestionCount >= 2) points = 0.1;
+            else points = type === 'war' ? -1 : -0.5;
+
+            score += points;
+            updateScore();
+            lastClickedRow = rowIndex;
+        }
+
+        function updateScore() {
+            const scoreElement = document.getElementById('score');
+            if (score < 0) {
+                scoreElement.textContent = score.toFixed(2).replace('-', '−');
+                scoreElement.style.direction = 'ltr';
+            } else {
+                scoreElement.textContent = score.toFixed(2);
+                scoreElement.style.direction = 'rtl';
+            }
+        }
+
+        function startTimer() {
+            const timerElement = document.getElementById('time');
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerElement.textContent = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    clearInterval(updateInterval);
+                    gameOver = true;
+                    showResults();
+                }
+            }, 1000);
+        }
+
+        function showResults() {
+            const resultBox = document.getElementById('resultBox');
+            let message = '';
+            if (score > 4) {
+                message = 'התקבלת להיות המעריך הלאומי של ישראל. בחרדת קודש אנחנו מאחלים לך בהצלחה';
+            } else if (score >= 2 && score <= 4) {
+                message = 'יש לך פוטנציאל להיות קמ"ן אוגדת עזה';
+            } else if (score >= 1 && score < 2) {
+                message = 'אתה צריך עוד להתאמן';
+            } else {
+                message = 'תן לי לנחש, קוראים לך אהרון חליווה? או רונן בר, אני צודק?';
+            }
+            resultBox.innerHTML = `<h3>תוצאות המשחק:</h3><p>${message}</p>`;
+            resultBox.style.display = 'block';
+        }
+
+        function resetGame() {
+            score = 0;
+            timeLeft = 60;
+            lastClickedRow = null;
+            clearInterval(updateInterval);
+            clearInterval(timerInterval);
+            updateScore();
+            document.getElementById('time').textContent = '60';
+            initializeGame();
+        }
+
+        initializeGame();
+		// פונקציה להצגת פופאפ הוראות בהתחלה
+		function showInitialInstructions() {
+		  const instructionsPopup = document.createElement('div');
+		  instructionsPopup.classList.add('instructions-popup');
+		  instructionsPopup.innerHTML = `
+			<h2>הוראות המשחק</h2>
+			<p>${document.querySelector('.instructions').innerHTML}</p>
+			<button onclick="closePopup()">סגור</button>
+		  `;
+		  document.body.appendChild(instructionsPopup);
+		}
+
+		// פונקציה לסגירת הפופאפ
+		function closePopup() {
+		  document.querySelector('.instructions-popup').remove();
+		}
+
+    </script>
+</body>
+</html>
